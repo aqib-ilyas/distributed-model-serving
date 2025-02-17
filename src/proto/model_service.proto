@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package model_service;
+
+service ModelService {
+    // Process input through model
+    rpc process (ModelInput) returns (ModelOutput) {}
+    
+    // Health check
+    rpc health_check (HealthCheckRequest) returns (HealthCheckResponse) {}
+}
+
+message ModelInput {
+    repeated float data = 1;
+    map<string, string> metadata = 2;
+}
+
+message ModelOutput {
+    repeated float data = 1;
+}
+
+message HealthCheckRequest {
+}
+
+message HealthCheckResponse {
+    string status = 1;
+}

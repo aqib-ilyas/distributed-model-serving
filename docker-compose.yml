@@ -1,0 +1,99 @@
+version: "3.8"
+
+services:
+    coordinator:
+        build:
+            context: .
+            dockerfile: docker/coordinator.Dockerfile
+        ports:
+            - "50050:50050"
+        volumes:
+            - ./src:/app/src
+        command: python /app/src/coordinator/coordinator_server.py --config /app/src/config/config.json --port 50050
+        networks:
+            - model-network
+        healthcheck:
+            test: ["CMD", "nc", "-z", "localhost", "50050"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+
+    node1:
+        build:
+            context: .
+            dockerfile: docker/node.Dockerfile
+        ports:
+            - "50051:50051"
+        volumes:
+            - ./src:/app/src
+        command: python /app/src/node/node_server.py --config /app/src/config/config.json --node-id node1
+        networks:
+            - model-network
+        depends_on:
+            coordinator:
+                condition: service_healthy
+
+    node2:
+        build:
+            context: .
+            dockerfile: docker/node.Dockerfile
+        ports:
+            - "50052:50052"
+        volumes:
+            - ./src:/app/src
+        command: python /app/src/node/node_server.py --config /app/src/config/config.json --node-id node2
+        networks:
+            - model-network
+        depends_on:
+            coordinator:
+                condition: service_healthy
+
+    node3:
+        build:
+            context: .
+            dockerfile: docker/node.Dockerfile
+        ports:
+            - "50053:50053"
+        volumes:
+            - ./src:/app/src
+        command: python /app/src/node/node_server.py --config /app/src/config/config.json --node-id node3
+        networks:
+            - model-network
+        depends_on:
+            coordinator:
+                condition: service_healthy
+
+    api:
+        build:
+            context: .
+            dockerfile: docker/api.Dockerfile
+        ports:
+            - "8000:8000"
+        volumes:
+            - ./src:/app/src
+        command: uvicorn src.api.api:app --host 0.0.0.0 --port 8000
+        depends_on:
+            coordinator:
+                condition: service_healthy
+        networks:
+            - model-network
+
+    frontend:
+        build:
+            context: .
+            dockerfile: docker/frontend.Dockerfile
+        ports:
+            - "5173:5173"
+        volumes:
+            - ./src/frontend:/app
+            - /app/node_modules
+        environment:
+            - VITE_API_URL=http://localhost:8000
+        depends_on:
+            - api
+        networks:
+            - model-network
+
+networks:
+    model-network:
+        driver: bridge
