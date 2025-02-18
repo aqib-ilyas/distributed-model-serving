@@ -86,21 +86,35 @@ class ModelCoordinator(model_service_pb2_grpc.ModelServiceServicer):
                 context.set_details(error_msg)
                 return model_service_pb2.ModelOutput()
             
-            current_data = request.data
-            logger.info("Starting request processing through node pipeline")
+            # Store the input data
+            current_data = list(request.data)
+            logger.info(f"Coordinator received input data: {current_data}")
+            
+            # Keep track of all node outputs
+            all_node_outputs = []
             
             # Process through each node in sequence
             for node in self.config['nodes']:
                 try:
-                    logger.info(f"Processing through node {node['id']}")
-                    response = await self.node_stubs[node['id']].process(
-                        model_service_pb2.ModelInput(
-                            data=current_data,
-                            metadata={'node_id': node['id']}
-                        )
+                    logger.info(f"Sending data to node {node['id']}")
+                    
+                    # Create node request with current data
+                    node_input = model_service_pb2.ModelInput(
+                        data=current_data,
+                        metadata={'node_id': node['id']}
                     )
-                    current_data = response.data
-                    logger.info(f"Successfully processed through node {node['id']}")
+                    
+                    # Get response from node
+                    response = await self.node_stubs[node['id']].process(node_input)
+                    node_output = list(response.data)
+                    logger.info(f"Response from node {node['id']}: {node_output}")
+                    
+                    # Add node output to our collection
+                    all_node_outputs.append(node_output)
+                    
+                    # Update current_data for next node in sequence
+                    current_data = node_output
+                    
                 except Exception as e:
                     error_msg = f"Processing failed at node {node['id']}: {str(e)}"
                     logger.error(error_msg)
@@ -108,8 +122,16 @@ class ModelCoordinator(model_service_pb2_grpc.ModelServiceServicer):
                     context.set_details(error_msg)
                     return model_service_pb2.ModelOutput()
             
-            logger.info("Request processing completed successfully")
-            return model_service_pb2.ModelOutput(data=current_data)
+            # Combine outputs from all nodes for the final response
+            # Taking the last output as it should contain the final processed result
+            final_output = all_node_outputs[-1]
+            
+            logger.info(f"Node outputs collected:")
+            for i, output in enumerate(all_node_outputs):
+                logger.info(f"Node {self.config['nodes'][i]['id']} output: {output}")
+            logger.info(f"Final output: {final_output}")
+            
+            return model_service_pb2.ModelOutput(data=final_output)
             
         except Exception as e:
             error_msg = f"Request processing failed: {str(e)}"

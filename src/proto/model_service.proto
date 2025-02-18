@@ -11,12 +11,12 @@ service ModelService {
 }
 
 message ModelInput {
-    repeated float data = 1;
+    repeated int32 data = 1;  // Changed to int32 to match tokenizer
     map<string, string> metadata = 2;
 }
 
 message ModelOutput {
-    repeated float data = 1;
+    repeated int32 data = 1;  // Changed to int32 to match tokenizer
 }
 
 message HealthCheckRequest {

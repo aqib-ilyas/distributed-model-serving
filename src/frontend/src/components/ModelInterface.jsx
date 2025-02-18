@@ -14,10 +14,6 @@ const ModelInterface = () => {
         setIsLoading(true);
         setError(null);
         try {
-            // Convert input text to integers
-            const encoder = new TextEncoder();
-            const inputData = Array.from(encoder.encode(input)).map(Number); // Convert to integers
-
             const response = await fetch(
                 "http://localhost:8000/api/model/process",
                 {
@@ -27,7 +23,7 @@ const ModelInterface = () => {
                     },
                     mode: "cors",
                     body: JSON.stringify({
-                        data: inputData,
+                        text: input,
                         metadata: {
                             timestamp: new Date().toISOString(),
                             type: "text_generation",
@@ -37,17 +33,12 @@ const ModelInterface = () => {
             );
 
             if (!response.ok) {
-                throw new Error("Failed to process input");
+                const errorData = await response.json();
+                throw new Error(errorData.detail || "Failed to process input");
             }
 
             const data = await response.json();
-            // Convert the response data back to text
-            const decoder = new TextDecoder();
-            const outputText = decoder.decode(new Uint8Array(data.data));
-            setResult({
-                ...data,
-                decodedText: outputText,
-            });
+            setResult(data);
         } catch (err) {
             setError(err.message);
         } finally {
@@ -100,7 +91,9 @@ const ModelInterface = () => {
                             <div className="mt-4">
                                 <h3 className="font-medium mb-2">Result:</h3>
                                 <div className="bg-gray-100 p-4 rounded-md overflow-auto">
-                                    <p>{result.decodedText}</p>
+                                    <p className="whitespace-pre-wrap">
+                                        {result.text}
+                                    </p>
                                 </div>
 
                                 <div className="mt-4">
@@ -109,18 +102,9 @@ const ModelInterface = () => {
                                     </h4>
                                     <div className="grid grid-cols-2 gap-2 text-sm">
                                         <div>Nodes Used:</div>
-                                        <div>3</div>
+                                        <div>{result.nodeCount}</div>
                                         <div>Processing Time:</div>
-                                        <div>
-                                            {result.processingTime || "N/A"} ms
-                                        </div>
-                                        <div>Output Size:</div>
-                                        <div>
-                                            {result.data
-                                                ? result.data.length
-                                                : 0}{" "}
-                                            elements
-                                        </div>
+                                        <div>{result.processingTime} ms</div>
                                     </div>
                                 </div>
                             </div>

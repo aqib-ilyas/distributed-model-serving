@@ -13,7 +13,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13model_service.proto\x12\rmodel_service\"\x86\x01\n\nModelInput\x12\x0c\n\x04\x64\x61ta\x18\x01 \x03(\x02\x12\x39\n\x08metadata\x18\x02 \x03(\x0b\x32\'.model_service.ModelInput.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x1b\n\x0bModelOutput\x12\x0c\n\x04\x64\x61ta\x18\x01 \x03(\x02\"\x14\n\x12HealthCheckRequest\"%\n\x13HealthCheckResponse\x12\x0e\n\x06status\x18\x01 \x01(\t2\xab\x01\n\x0cModelService\x12\x42\n\x07process\x12\x19.model_service.ModelInput\x1a\x1a.model_service.ModelOutput\"\x00\x12W\n\x0chealth_check\x12!.model_service.HealthCheckRequest\x1a\".model_service.HealthCheckResponse\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x13model_service.proto\x12\rmodel_service\"\x86\x01\n\nModelInput\x12\x0c\n\x04\x64\x61ta\x18\x01 \x03(\x05\x12\x39\n\x08metadata\x18\x02 \x03(\x0b\x32\'.model_service.ModelInput.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"\x1b\n\x0bModelOutput\x12\x0c\n\x04\x64\x61ta\x18\x01 \x03(\x05\"\x14\n\x12HealthCheckRequest\"%\n\x13HealthCheckResponse\x12\x0e\n\x06status\x18\x01 \x01(\t2\xab\x01\n\x0cModelService\x12\x42\n\x07process\x12\x19.model_service.ModelInput\x1a\x1a.model_service.ModelOutput\"\x00\x12W\n\x0chealth_check\x12!.model_service.HealthCheckRequest\x1a\".model_service.HealthCheckResponse\"\x00\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)

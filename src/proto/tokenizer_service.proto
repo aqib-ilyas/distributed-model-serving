@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package tokenizer_service;
+
+service TokenizerService {
+    // Tokenize text input
+    rpc process_text (TextInput) returns (TokenOutput) {}
+    
+    // Decode tokens to text
+    rpc process_tokens (TokenInput) returns (TextOutput) {}
+    
+    // Health check
+    rpc health_check (HealthCheckRequest) returns (HealthCheckResponse) {}
+}
+
+message TextInput {
+    string text = 1;
+    map<string, string> metadata = 2;
+}
+
+message TokenOutput {
+    repeated int32 tokens = 1;  // Changed to int32 since GPT2Tokenizer works with integers
+}
+
+message TokenInput {
+    repeated int32 tokens = 1;  // Changed to int32 to match GPT2Tokenizer expectations
+    map<string, string> metadata = 2;
+}
+
+message TextOutput {
+    string text = 1;
+}
+
+message HealthCheckRequest {
+}
+
+message HealthCheckResponse {
+    string status = 1;
+}

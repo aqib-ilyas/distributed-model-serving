@@ -1,11 +1,12 @@
 import os
 import logging
-from typing import List, Dict
+from typing import Dict
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import grpc
+import grpc.aio
 import time
 import asyncio
 import sys
@@ -18,6 +19,8 @@ sys.path.append(proto_dir)
 
 import model_service_pb2
 import model_service_pb2_grpc
+import tokenizer_service_pb2
+import tokenizer_service_pb2_grpc
 
 # Configure logging
 logging.basicConfig(
@@ -28,7 +31,6 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Model Serving API")
 
-# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,43 +40,83 @@ app.add_middleware(
 )
 
 class ModelRequest(BaseModel):
-    data: List[float]
+    text: str
     metadata: Dict[str, str] = {}
 
 class ModelResponse(BaseModel):
-    data: List[float]
+    text: str
     processingTime: float
     nodeCount: int = 3
 
-# Error handler middleware
-@app.middleware("http")
-async def error_handler(request: Request, call_next):
-    try:
-        return await call_next(request)
-    except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
-        return JSONResponse(
-            status_code=500,
-            content={"detail": str(e)}
-        )
+class TokenizerClient:
+    def __init__(self):
+        self.channel = None
+        self.stub = None
 
-@app.get("/api/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy"}
+    async def connect(self):
+        if not self.channel:
+            self.channel = grpc.aio.insecure_channel(
+                'tokenizer:50054',
+                options=[
+                    ('grpc.max_send_message_length', 50 * 1024 * 1024),
+                    ('grpc.max_receive_message_length', 50 * 1024 * 1024)
+                ]
+            )
+            self.stub = tokenizer_service_pb2_grpc.TokenizerServiceStub(self.channel)
+
+    async def tokenize(self, text: str, metadata: Dict[str, str] = None) -> list[float]:
+        await self.connect()
+        try:
+            response = await self.stub.process_text(
+                tokenizer_service_pb2.TextInput(
+                    text=text,
+                    metadata=metadata or {}
+                )
+            )
+            return list(response.tokens)
+        except Exception as e:
+            logger.error(f"Tokenization failed: {str(e)}")
+            raise
+
+    async def decode(self, tokens: list[float], metadata: Dict[str, str] = None) -> str:
+        await self.connect()
+        try:
+            response = await self.stub.process_tokens(
+                tokenizer_service_pb2.TokenInput(
+                    tokens=tokens,
+                    metadata=metadata or {}
+                )
+            )
+            return response.text
+        except Exception as e:
+            logger.error(f"Decoding failed: {str(e)}")
+            raise
+
+    async def close(self):
+        if self.channel:
+            await self.channel.close()
+
+tokenizer_client = TokenizerClient()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await tokenizer_client.close()
 
 @app.post("/api/model/process")
 async def process_model(request: ModelRequest):
-    """Process data through the distributed model"""
+    """Process text through the distributed model"""
     start_time = time.time()
-    channel = None
+    model_channel = None
     
     try:
-        logger.info(f"Received request with data length: {len(request.data)}")
-        logger.info(f"Request metadata: {request.metadata}")
+        logger.info(f"Received text request: {request.text}")
+        
+        # Tokenize input text
+        input_tokens = await tokenizer_client.tokenize(request.text, request.metadata)
+        logger.info(f"Tokenized input tokens: {input_tokens}")
         
         # Connect to coordinator service
-        channel = grpc.aio.insecure_channel(
+        model_channel = grpc.aio.insecure_channel(
             'coordinator:50050',
             options=[
                 ('grpc.max_send_message_length', 50 * 1024 * 1024),
@@ -83,69 +125,50 @@ async def process_model(request: ModelRequest):
                 ('grpc.keepalive_timeout_ms', 10000)
             ]
         )
-        stub = model_service_pb2_grpc.ModelServiceStub(channel)
-        
-        # Add timestamp to metadata if not present
-        if 'timestamp' not in request.metadata:
-            request.metadata['timestamp'] = time.strftime('%Y-%m-%d %H:%M:%S')
+        model_stub = model_service_pb2_grpc.ModelServiceStub(model_channel)
         
         # Create gRPC request
         grpc_request = model_service_pb2.ModelInput(
-            data=request.data,
+            data=input_tokens,
             metadata=request.metadata
         )
         
         # Call coordinator service with timeout
         try:
             response = await asyncio.wait_for(
-                stub.process(grpc_request),
-                timeout=30.0  # 30 second timeout
+                model_stub.process(grpc_request),
+                timeout=30.0
             )
+            logger.info(f"Received response from model. Tokens: {list(response.data)}")
         except asyncio.TimeoutError:
             logger.error("Request timed out")
             raise HTTPException(status_code=504, detail="Request timed out")
         
+        # Decode output tokens
+        output_text = await tokenizer_client.decode(
+            list(response.data),
+            request.metadata
+        )
+        logger.info(f"Final decoded output text: {output_text}")
+        
         processing_time = (time.time() - start_time) * 1000  # Convert to milliseconds
         
         return ModelResponse(
-            data=list(response.data),
+            text=output_text,
             processingTime=round(processing_time, 2),
             nodeCount=3
         )
         
-    except grpc.RpcError as e:
-        logger.error(f"gRPC error: {e.details() if hasattr(e, 'details') else str(e)}")
-        status_code = e.code() if hasattr(e, 'code') else grpc.StatusCode.UNKNOWN
-        if status_code == grpc.StatusCode.UNAVAILABLE:
-            raise HTTPException(
-                status_code=503,
-                detail="Service temporarily unavailable. Nodes are not ready."
-            )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Model processing failed: {e.details() if hasattr(e, 'details') else str(e)}"
-        )
-        
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
+        logger.error(f"Error processing request: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Internal server error: {str(e)}"
+            detail=f"Processing failed: {str(e)}"
         )
         
     finally:
-        if channel:
-            await channel.close()
-
-@app.get("/api/model/config")
-async def get_model_config():
-    """Get current model configuration"""
-    return {
-        "nodeCount": 3,
-        "modelName": "gpt2",
-        "maxInputSize": 1024,
-        "version": "1.0.0"
-    }
+        if model_channel:
+            await model_channel.close()
 
 if __name__ == "__main__":
     import uvicorn
@@ -153,5 +176,5 @@ if __name__ == "__main__":
         "api:app",
         host="0.0.0.0",
         port=8000,
-        reload=True  # Enable auto-reload during development
+        reload=True
     )

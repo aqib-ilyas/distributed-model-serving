@@ -1,4 +1,4 @@
-version: "3.8"
+name: ds-project
 
 services:
     coordinator:
@@ -63,6 +63,23 @@ services:
             coordinator:
                 condition: service_healthy
 
+    tokenizer:
+        build:
+            context: .
+            dockerfile: docker/tokenizer.Dockerfile
+        ports:
+            - "50054:50054"
+        volumes:
+            - ./src:/app/src
+        command: python /app/src/tokenizer/tokenizer_server.py --port 50054
+        networks:
+            - model-network
+        healthcheck:
+            test: ["CMD", "nc", "-z", "localhost", "50054"]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+
     api:
         build:
             context: .
@@ -71,12 +88,16 @@ services:
             - "8000:8000"
         volumes:
             - ./src:/app/src
-        command: uvicorn src.api.api:app --host 0.0.0.0 --port 8000
+        command: uvicorn src.api.api:app --host 0.0.0.0 --port 8000 --reload
         depends_on:
             coordinator:
                 condition: service_healthy
+            tokenizer:
+                condition: service_healthy
         networks:
             - model-network
+        environment:
+            - PYTHONPATH=/app
 
     frontend:
         build:
@@ -93,6 +114,7 @@ services:
             - api
         networks:
             - model-network
+        command: npm run dev -- --host 0.0.0.0
 
 networks:
     model-network:

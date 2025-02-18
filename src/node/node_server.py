@@ -114,14 +114,10 @@ class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
     async def process(self, request, context):
         """Process input through this node's portion of the model."""
         try:
-            # Convert input to a tensor with shape [batch_size, sequence_length]
-            input_data = torch.tensor([request.data], dtype=torch.long)  # Add batch dimension and ensure long type
-            cache_key = str(input_data.cpu().numpy().tobytes())
+            logger.info(f"Node {self.config['node_config']['id']} received input: {list(request.data)}")
             
-            # Check cache
-            if cache_key in self.cache:
-                logger.debug("Cache hit for input")
-                return model_service_pb2.ModelOutput(data=self.cache[cache_key])
+            # Convert input floats to integers and create tensor
+            input_data = torch.tensor([request.data], dtype=torch.long)  # Add batch dimension
             
             with torch.no_grad():
                 # Move input to correct device if model is on GPU
@@ -130,16 +126,13 @@ class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
                     
                 # Forward pass through the model
                 outputs = self.model(input_ids=input_data)
-                # Get logits and convert to probabilities
                 logits = outputs.logits
-                probs = torch.softmax(logits, dim=-1)
+                
                 # Get the most likely token for each position
-                predictions = torch.argmax(probs, dim=-1)
-                output_data = predictions.cpu().numpy().tolist()[0]  # Convert back to list and remove batch dimension
+                predictions = torch.argmax(logits, dim=-1)
+                output_data = predictions.cpu().numpy().tolist()[0]  # Convert back to list
             
-            # Cache result
-            self.cache[cache_key] = output_data
-            logger.debug("Processed input successfully")
+            logger.info(f"Node {self.config['node_config']['id']} output: {output_data}")
             return model_service_pb2.ModelOutput(data=output_data)
                 
         except Exception as e:
