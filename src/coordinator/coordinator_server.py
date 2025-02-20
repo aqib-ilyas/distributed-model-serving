@@ -86,34 +86,34 @@ class ModelCoordinator(model_service_pb2_grpc.ModelServiceServicer):
                 context.set_details(error_msg)
                 return model_service_pb2.ModelOutput()
             
-            # Store the input data
-            current_data = list(request.data)
-            logger.info(f"Coordinator received input data: {current_data}")
+            # Keep track of the original input length
+            input_length = len(request.data)
+            current_sequence = list(request.data)
+            logger.info(f"Initial input sequence: {current_sequence}")
             
-            # Keep track of all node outputs
-            all_node_outputs = []
-            
-            # Process through each node in sequence
-            for node in self.config['nodes']:
+            # Process through nodes in sequence
+            for i, node in enumerate(self.config['nodes']):
                 try:
-                    logger.info(f"Sending data to node {node['id']}")
+                    logger.info(f"Processing through node {node['id']}")
                     
-                    # Create node request with current data
-                    node_input = model_service_pb2.ModelInput(
-                        data=current_data,
-                        metadata={'node_id': node['id']}
+                    response = await self.node_stubs[node['id']].process(
+                        model_service_pb2.ModelInput(
+                            data=current_sequence,
+                            metadata={
+                                'node_id': node['id'],
+                                'node_index': str(i),
+                                'total_nodes': str(len(self.config['nodes'])),
+                                'input_length': str(input_length)
+                            }
+                        )
                     )
                     
-                    # Get response from node
-                    response = await self.node_stubs[node['id']].process(node_input)
-                    node_output = list(response.data)
-                    logger.info(f"Response from node {node['id']}: {node_output}")
+                    # Get only the new tokens (excluding the input)
+                    new_tokens = list(response.data)[len(current_sequence):]
+                    logger.info(f"Node {node['id']} added tokens: {new_tokens}")
                     
-                    # Add node output to our collection
-                    all_node_outputs.append(node_output)
-                    
-                    # Update current_data for next node in sequence
-                    current_data = node_output
+                    # Update current sequence
+                    current_sequence = list(response.data)
                     
                 except Exception as e:
                     error_msg = f"Processing failed at node {node['id']}: {str(e)}"
@@ -122,16 +122,10 @@ class ModelCoordinator(model_service_pb2_grpc.ModelServiceServicer):
                     context.set_details(error_msg)
                     return model_service_pb2.ModelOutput()
             
-            # Combine outputs from all nodes for the final response
-            # Taking the last output as it should contain the final processed result
-            final_output = all_node_outputs[-1]
-            
-            logger.info(f"Node outputs collected:")
-            for i, output in enumerate(all_node_outputs):
-                logger.info(f"Node {self.config['nodes'][i]['id']} output: {output}")
-            logger.info(f"Final output: {final_output}")
-            
-            return model_service_pb2.ModelOutput(data=final_output)
+            # For the final response, only return the generated tokens (exclude the original input)
+            final_response = current_sequence[input_length:]
+            logger.info(f"Final generated tokens: {final_response}")
+            return model_service_pb2.ModelOutput(data=final_response)
             
         except Exception as e:
             error_msg = f"Request processing failed: {str(e)}"

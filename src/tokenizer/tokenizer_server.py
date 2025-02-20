@@ -87,6 +87,13 @@ class TokenizerServicer(tokenizer_service_pb2_grpc.TokenizerServiceServicer):
                 skip_special_tokens=True,
                 clean_up_tokenization_spaces=True
             )
+            
+            # Clean up the text
+            text = text.strip()  # Remove leading/trailing whitespace
+            
+            # Remove multiple newlines
+            text = ' '.join(line.strip() for line in text.splitlines() if line.strip())
+            
             logger.info(f"Decoded text: {text}")
             return tokenizer_service_pb2.TextOutput(text=text)
         except Exception as e:

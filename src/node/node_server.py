@@ -3,7 +3,7 @@ import json
 import logging
 from concurrent import futures
 import torch
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, GPT2Tokenizer
 import grpc
 import grpc.aio  # Add explicit import for grpc.aio
 import asyncio
@@ -26,8 +26,10 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
+    
     def __init__(self, config_path: str, node_id: str):
         self.config = self.load_config(config_path, node_id)
+        self.tokenizer = GPT2Tokenizer.from_pretrained('gpt2') 
         self.model = self.load_model()
         self.cache = {}
         logger.info("Node %s initialized successfully", node_id)
@@ -116,24 +118,69 @@ class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
         try:
             logger.info(f"Node {self.config['node_config']['id']} received input: {list(request.data)}")
             
-            # Convert input floats to integers and create tensor
-            input_data = torch.tensor([request.data], dtype=torch.long)  # Add batch dimension
+            # Convert input to tensor
+            input_data = torch.tensor([request.data], dtype=torch.long)
+            attention_mask = torch.ones_like(input_data)
+            input_length = len(request.data)
             
             with torch.no_grad():
-                # Move input to correct device if model is on GPU
                 if torch.cuda.is_available():
                     input_data = input_data.cuda()
-                    
-                # Forward pass through the model
-                outputs = self.model(input_ids=input_data)
-                logits = outputs.logits
+                    attention_mask = attention_mask.cuda()
                 
-                # Get the most likely token for each position
-                predictions = torch.argmax(logits, dim=-1)
-                output_data = predictions.cpu().numpy().tolist()[0]  # Convert back to list
-            
-            logger.info(f"Node {self.config['node_config']['id']} output: {output_data}")
-            return model_service_pb2.ModelOutput(data=output_data)
+                # Adjust generation parameters based on node position
+                is_first_node = self.config['node_config']['id'] == 'node1'
+                is_last_node = self.config['node_config']['id'] == 'node3'
+                
+                # Configure generation parameters
+                generation_params = {
+                    'input_ids': input_data,
+                    'attention_mask': attention_mask,
+                    'num_beams': 5,
+                    'do_sample': True,
+                    'top_k': 40,         # Increased from 30
+                    'top_p': 0.95,       # Increased from 0.92
+                    'temperature': 0.8,   # Slightly reduced
+                    'pad_token_id': self.model.config.eos_token_id,
+                    'repetition_penalty': 1.3,  # Increased from 1.2
+                    'length_penalty': 1.2,      # Increased to favor longer sequences
+                    'early_stopping': True,
+                }
+                
+                # Adjust parameters based on node position
+                if is_first_node:
+                    # First node generates a longer main response
+                    generation_params.update({
+                        'max_length': input_length + 30,  # Increased from 20 
+                        'min_length': input_length + 15,  # Increased from 10
+                        'no_repeat_ngram_size': 3,
+                    })
+                elif is_last_node:
+                    # Last node adds a proper conclusion
+                    generation_params.update({
+                        'max_length': input_length + 10,  # Increased from 5
+                        'min_length': input_length + 3,   # Increased from 1
+                        'no_repeat_ngram_size': 2,
+                    })
+                else:
+                    # Middle node continues the thought
+                    generation_params.update({
+                        'max_length': input_length + 15,  # Increased from 8
+                        'min_length': input_length + 5,   # Increased from 3
+                        'no_repeat_ngram_size': 2,
+                    })
+                
+                # Generate text
+                outputs = self.model.generate(**generation_params)
+                
+                # Get only the new tokens
+                output_sequence = outputs[0, input_length:].cpu().tolist()
+                
+                logger.info(f"Node {self.config['node_config']['id']} generated new tokens: {output_sequence}")
+                
+                # Return combined sequence
+                combined_sequence = list(request.data) + output_sequence
+                return model_service_pb2.ModelOutput(data=combined_sequence)
                 
         except Exception as e:
             error_msg = f"Processing failed: {str(e)}"
