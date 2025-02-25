@@ -1,98 +1,131 @@
-# Distributed Model Serving System
+# Distributed Model Inference System
 
-A distributed system for serving large language models across multiple nodes. The system implements a pipeline architecture where the model is split across multiple nodes, with text tokenization handled by a dedicated service.
+A scalable, distributed system for serving machine learning models with high availability and monitoring capabilities.
 
-## Architecture
+## System Architecture
 
-The system consists of several microservices:
+This system distributes a language model across multiple nodes, enabling more efficient serving and higher throughput:
 
--   **Coordinator Service**: Manages the distribution of work across model nodes
--   **Model Nodes**: Each node handles a portion of the model computation
--   **Tokenizer Service**: Handles text tokenization and detokenization
--   **API Service**: Provides a REST API interface for clients
--   **Frontend**: React-based user interface
+![System Architecture](https://mermaid.ink/img/pako:eNqVVF1r2zAU_StCT-ugjnPtlieTA9t6KAxCk70VPch2nYjKkpFkxyv97zuSk9RuYTQPDvK9n-fee0T3IlQKRSIUJcgGWvhXnONI1r1XjcwZwZwBL1uKpQbiQg68K0XSAMdWJCUWPcjWITcFi0bHQRkSoGnAuhjrJJP3HWsJrVuuq1zyGKTNEVYgVQYsXkJpShY9m3F4rq6tZTjM1jQNeDnlr0NkDfYhMDkZxOc1XJRiZLSGOV4UHGxO3kw2rQkJ32GFZrn00jXN9vRdkEzq6lPLBb8zBptWn2nUg7s5Lv0LcuZkX9-AEHO2M7x93l_wYDHHFPCeSh-ZiRHdCHOnnwCmzpRQumFn7ljqkO2lj0rQ7nnKyNbFMnCw9TwNQMHw33nh1oJpFuF2c7ybM1hRXrDhPsFsm80OUG7qFfNmZOsWpepAlPxRQnOrnDVCu0w7hDFtK6j3S-sMYWVQoVQpvs_vS5Cf8ftx1E74a0GQZlk2CIJoVaHJnmVoI78C3RGlS6xTFHlB90OZGj4EvKnBtOhC9M7RDY9G6MJXrKTbGEy37nIbQ1LznnFTAO0Gy8YOV7XKxpnhw0lOH4_KqQy2QCYOVVCjrPrYrpytKsj-f9HuWV4fBe9-mh9pnLsfrfWXebY6HenUx5l-KFkT-nBkHYqBL9dnyOeA-rlLt9zIQfxOz7YlUg0kO4KY-VE06XWpVNBJ3GxkNUg3kTQG7bm6aB0Nls2JeENKx2d8rXCK_2-oPnwNuN3g-vaqNXzRwcv3q3X8JUKf6mj5pP_TBIl_JJHwb_KbQpk0IhHu85d5fkfnN99_fP_55SaZZXbiyVFhzjfbxJsHs_lHbzaJd35xkSSL2VmSLPw5nCn-F-5W7rHv3vbZ57N_zZa9OA)
 
-### Service Communication
+### Components:
 
-```
-Frontend <-> API <-> Coordinator <-> Model Nodes
-                 <-> Tokenizer
-```
+1. **Frontend Service**
 
-All inter-service communication uses gRPC, except for the Frontend-API communication which uses REST.
+    - React/Vite application serving the user interface
+    - Communicates with API service over HTTP
 
-## Project Structure
+2. **API Service**
 
-```
-src/
-├── proto/
-│   ├── model_service.proto
-│   └── tokenizer_service.proto
-├── coordinator/
-│   ├── __init__.py
-│   └── coordinator_server.py
-├── node/
-│   ├── __init__.py
-│   └── node_server.py
-├── tokenizer/
-│   ├── __init__.py
-│   └── tokenizer_server.py
-├── api/
-│   ├── __init__.py
-│   └── api.py
-└── frontend/
-    └── src/
-        ├── components/
-        └── App.tsx
+    - FastAPI application that handles client requests
+    - Coordinates with Tokenizer for text encoding/decoding
+    - Communicates with Coordinator for model inference
+    - Exposes metrics for Prometheus
 
-docker/
-├── coordinator.Dockerfile
-├── node.Dockerfile
-├── tokenizer.Dockerfile
-├── api.Dockerfile
-└── frontend.Dockerfile
-```
+3. **Tokenizer Service**
 
-## Prerequisites
+    - Handles text tokenization and detokenization using GPT2 tokenizer
+    - Communicates with API service via gRPC
+    - Exposes metrics for Prometheus
+
+4. **Coordinator Service**
+
+    - Orchestrates distributed inference across model nodes
+    - Manages request routing and response aggregation
+    - Handles node health checking
+    - Exposes metrics for Prometheus
+
+5. **Model Nodes (1,2,3)**
+
+    - Each runs a portion of the model
+    - Communicates with Coordinator via gRPC
+    - Can be scaled with replicas for fault tolerance
+    - Expose metrics for Prometheus
+
+6. **Monitoring Stack**
+    - Prometheus: Collects metrics from all services
+    - Grafana: Visualizes metrics with customizable dashboards
+
+## Getting Started
+
+### Prerequisites
 
 -   Docker and Docker Compose
--   Python 3.9+
--   Node.js 16+
--   gRPC tools
+-   8GB+ RAM for running the full stack
+-   Git
 
-## Setup
+### Installation
 
 1. Clone the repository:
 
-    ```bash
-    git clone <repository-url>
-    cd <repository-name>
-    ```
+```bash
+git clone https://github.com/yourusername/distributed-model-inference.git
+cd distributed-model-inference
+```
 
-2. Generate gRPC code:
+2. Build and start the services:
 
-    ```bash
-    python -m grpc_tools.protoc -I./src/proto \
-        --python_out=./src/proto \
-        --grpc_python_out=./src/proto \
-        ./src/proto/*.proto
-    ```
+```bash
+docker-compose up -d
+```
 
-3. Install Python dependencies:
+3. Start the monitoring stack:
 
-    ```bash
-    pip install -r requirements.txt
-    ```
+```bash
+docker-compose -f docker-compose.monitoring.yml up -d
+```
 
-4. Install frontend dependencies:
-    ```bash
-    cd src/frontend
-    npm install
-    ```
+4. Access the interfaces:
+    - Frontend: http://localhost:5173
+    - API Docs: http://localhost:8000/docs
+    - Prometheus: http://localhost:9090
+    - Grafana: http://localhost:3000 (default login: admin/admin)
+
+## Usage
+
+### Using the UI
+
+1. Open http://localhost:5173 in your browser
+2. Enter your text in the input field
+3. Click "Process Input"
+4. View the results and processing metrics
+
+### Using the API Directly
+
+```bash
+curl -X POST http://localhost:8000/api/model/process \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Hello, how are you?", "metadata": {}}'
+```
+
+## Monitoring
+
+The system includes comprehensive monitoring with Prometheus and Grafana.
+
+### Key Metrics:
+
+-   **API Metrics**: Request counts, latencies, token counts
+-   **Model Metrics**: Inference times, memory usage
+-   **Node Health**: Status of each node
+-   **Tokenizer Metrics**: Operation counts and latencies
+
+### Grafana Dashboards:
+
+A default dashboard is provided showing:
+
+-   API request latency
+-   Model inference latency by node
+-   Tokenizer operations
+-   Memory usage
+-   Request success/error rates
+-   Token counts
+-   Node health status
 
 ## Configuration
 
-Create a configuration file at `src/config/config.json`:
+### Model Configuration
+
+The `config.json` file configures the distribution of the model:
 
 ```json
 {
@@ -117,77 +150,92 @@ Create a configuration file at `src/config/config.json`:
 }
 ```
 
-## Running the System
+### Prometheus Configuration
 
-1. Start all services using Docker Compose:
+`prometheus/prometheus.yml` configures metric collection:
 
-    ```bash
-    docker-compose up --build
-    ```
+```yaml
+global:
+    scrape_interval: 15s
+    evaluation_interval: 15s
 
-2. Access the services:
-    - Frontend: http://localhost:5173
-    - API: http://localhost:8000
-    - Coordinator: localhost:50050
-    - Model Nodes: localhost:50051-50053
-    - Tokenizer: localhost:50054
-
-## API Endpoints
-
-### REST API
-
-`POST /api/model/process`
-
-```json
-{
-    "text": "Input text to process",
-    "metadata": {
-        "timestamp": "2024-02-17T12:00:00Z",
-        "type": "text_generation"
-    }
-}
+scrape_configs:
+    - job_name: "coordinator"
+      static_configs:
+          - targets: ["coordinator:8000"]
+    - job_name: "nodes"
+      static_configs:
+          - targets: ["node1:8001", "node2:8001", "node3:8001"]
+    - job_name: "tokenizer"
+      static_configs:
+          - targets: ["tokenizer:8002"]
+    - job_name: "api"
+      static_configs:
+          - targets: ["api:8000"]
 ```
 
-Response:
+## Deployment Options
 
-```json
-{
-    "text": "Processed text output",
-    "processingTime": 123.45,
-    "nodeCount": 3
-}
-```
-
-## Development
-
-### Adding a New Model Node
-
-1. Update `config.json` with the new node configuration
-2. Add the node service to `docker-compose.yml`
-3. Update the coordinator to handle the new node
-
-### Modifying the Pipeline
-
-The processing pipeline can be modified in `coordinator_server.py`. The current implementation processes data sequentially through all nodes.
-
-## Testing
-
-Run tests using pytest:
+### Docker Compose (Local Development)
 
 ```bash
-pytest tests/
+docker-compose up -d
+docker-compose -f docker-compose.monitoring.yml up -d
 ```
 
-## Monitoring
+### Kubernetes (Production)
 
-Each service includes logging and health check endpoints. Monitor service health using:
+Kubernetes manifests are provided in the `k8s/` directory:
 
 ```bash
-docker-compose ps
+kubectl create namespace model-inference
+kubectl apply -f k8s/config.yaml -n model-inference
+kubectl apply -f k8s/ -n model-inference
 ```
 
-View logs using:
+## Scalability and High Availability
+
+The system supports high availability through node replication:
+
+1. **Model Nodes**: Each can be scaled with multiple replicas
+2. **Tokenizer**: Can be scaled for higher throughput
+3. **API Service**: Can be scaled horizontally behind a load balancer
+
+## Extending the System
+
+### Adding New Model Types
+
+1. Update the tokenizer service to support the new model's tokenization
+2. Modify the node service to load the new model
+3. Update the configuration to specify the new model and its partitioning
+
+### Custom Metrics
+
+1. Add new metrics to the relevant service in `src/metrics/metrics.py`
+2. Restart the service
+3. Update or create Grafana dashboards to visualize the new metrics
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Service fails to start**: Check logs with `docker-compose logs <service_name>`
+2. **Grafana can't connect to Prometheus**: Verify network connectivity and datasource configuration
+3. **Model inference errors**: Check node logs and memory usage
+
+### Checking Logs
 
 ```bash
-docker-compose logs [service_name]
+# View logs for a specific service
+docker-compose logs api
+
+# Follow logs
+docker-compose logs -f coordinator
 ```
+
+## Acknowledgements
+
+-   The OpenAI GPT-2 model
+-   FastAPI for the API framework
+-   gRPC for high-performance communication
+-   Prometheus and Grafana for monitoring

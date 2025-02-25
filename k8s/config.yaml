@@ -1,0 +1,108 @@
+# k8s/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: model-config
+data:
+    config.json: |
+        {
+          "model_name": "gpt2",
+          "nodes": [
+            {
+              "id": "node1",
+              "address": "node1:50051",
+              "model_part": 0
+            },
+            {
+              "id": "node2",
+              "address": "node2:50052",
+              "model_part": 1
+            },
+            {
+              "id": "node3",
+              "address": "node3:50053",
+              "model_part": 2
+            }
+          ]
+        }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: prometheus-config
+data:
+    prometheus.yml: |
+        global:
+          scrape_interval: 15s
+          evaluation_interval: 15s
+
+        scrape_configs:
+          - job_name: 'kubernetes-services'
+            kubernetes_sd_configs:
+              - role: service
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+                action: keep
+                regex: true
+              - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+                action: replace
+                target_label: __scheme__
+                regex: (https?)
+              - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+                action: replace
+                target_label: __metrics_path__
+                regex: (.+)
+              - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+                action: replace
+                target_label: __address__
+                regex: ([^:]+)(?::\d+)?;(\d+)
+                replacement: $1:$2
+              - action: labelmap
+                regex: __meta_kubernetes_service_label_(.+)
+              - source_labels: [__meta_kubernetes_namespace]
+                action: replace
+                target_label: kubernetes_namespace
+              - source_labels: [__meta_kubernetes_service_name]
+                action: replace
+                target_label: kubernetes_service_name
+
+          - job_name: 'coordinator'
+            static_configs:
+              - targets: ['coordinator:8000']
+                labels:
+                  service: 'coordinator'
+
+          - job_name: 'nodes'
+            static_configs:
+              - targets: ['node1:8001', 'node2:8001', 'node3:8001']
+                labels:
+                  service: 'model_nodes'
+
+          - job_name: 'tokenizer'
+            static_configs:
+              - targets: ['tokenizer:8002']
+                labels:
+                  service: 'tokenizer'
+
+          - job_name: 'api'
+            static_configs:
+              - targets: ['api:8000']
+                labels:
+                  service: 'api'
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: grafana-datasources
+data:
+    prometheus.yaml: |
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            access: proxy
+            url: http://prometheus:9090
+            isDefault: true
+            editable: false
+            jsonData:
+              timeInterval: 15s

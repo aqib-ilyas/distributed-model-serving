@@ -3,9 +3,11 @@ import json
 import logging
 from concurrent import futures
 import grpc
-import grpc.aio  # Add explicit import for grpc.aio
+import grpc.aio
 import asyncio
 import sys
+import time
+from prometheus_client import start_http_server, Counter, Histogram, Gauge, Info
 
 # Add relative import path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -23,11 +25,48 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Define metrics
+COORDINATOR_REQUESTS = Counter(
+    'coordinator_requests_total',
+    'Total number of coordinator requests',
+    ['status']  # success/error
+)
+
+NODE_LATENCY = Histogram(
+    'node_processing_latency_seconds',
+    'Time taken for processing in each node',
+    ['node_id']
+)
+
+TOTAL_PROCESSING_TIME = Histogram(
+    'total_processing_time_seconds',
+    'Total time taken for complete request processing'
+)
+
+NODE_HEALTH = Gauge(
+    'node_health_status',
+    'Health status of each node',
+    ['node_id']  # 1 for healthy, 0 for unhealthy
+)
+
+COORDINATOR_INFO = Info('coordinator', 'Coordinator information')
+
 class ModelCoordinator(model_service_pb2_grpc.ModelServiceServicer):
     def __init__(self, config_path: str):
+        # Start Prometheus metrics server
+        start_http_server(8000)
+        
         self.config = self.load_config(config_path)
         self.node_stubs = {}
         self.setup_connections()
+        
+        # Record coordinator information
+        COORDINATOR_INFO.info({
+            'model_name': self.config['model_name'],
+            'node_count': str(len(self.config['nodes'])),
+            'config_path': config_path
+        })
+        
         logger.info("Coordinator initialized with %d nodes", len(self.config['nodes']))
     
     def load_config(self, config_path: str) -> dict:
@@ -45,7 +84,7 @@ class ModelCoordinator(model_service_pb2_grpc.ModelServiceServicer):
         """Setup gRPC connections to all nodes."""
         for node in self.config['nodes']:
             try:
-                channel = grpc.aio.insecure_channel(  # Changed to aio.insecure_channel
+                channel = grpc.aio.insecure_channel(
                     node['address'],
                     options=[
                         ('grpc.max_send_message_length', 50 * 1024 * 1024),
@@ -69,19 +108,23 @@ class ModelCoordinator(model_service_pb2_grpc.ModelServiceServicer):
                     model_service_pb2.HealthCheckRequest(),
                     timeout=5
                 )
+                NODE_HEALTH.labels(node_id=node['id']).set(1)
             except grpc.RpcError as e:
                 logger.warning("Node %s is unhealthy: %s", node['id'], str(e))
+                NODE_HEALTH.labels(node_id=node['id']).set(0)
                 unhealthy_nodes.append(node['id'])
         return unhealthy_nodes
     
     async def process(self, request, context):
         """Process request through all nodes in sequence."""
+        start_time = time.time()
         try:
             # Check node health
             unhealthy_nodes = await self.check_node_health()
             if unhealthy_nodes:
                 error_msg = f"Nodes {unhealthy_nodes} are unavailable"
                 logger.error(error_msg)
+                COORDINATOR_REQUESTS.labels(status='error').inc()
                 context.set_code(grpc.StatusCode.UNAVAILABLE)
                 context.set_details(error_msg)
                 return model_service_pb2.ModelOutput()
@@ -95,6 +138,7 @@ class ModelCoordinator(model_service_pb2_grpc.ModelServiceServicer):
             for i, node in enumerate(self.config['nodes']):
                 try:
                     logger.info(f"Processing through node {node['id']}")
+                    node_start_time = time.time()
                     
                     response = await self.node_stubs[node['id']].process(
                         model_service_pb2.ModelInput(
@@ -108,6 +152,11 @@ class ModelCoordinator(model_service_pb2_grpc.ModelServiceServicer):
                         )
                     )
                     
+                    # Record node processing time
+                    NODE_LATENCY.labels(node_id=node['id']).observe(
+                        time.time() - node_start_time
+                    )
+                    
                     # Get only the new tokens (excluding the input)
                     new_tokens = list(response.data)[len(current_sequence):]
                     logger.info(f"Node {node['id']} added tokens: {new_tokens}")
@@ -118,9 +167,14 @@ class ModelCoordinator(model_service_pb2_grpc.ModelServiceServicer):
                 except Exception as e:
                     error_msg = f"Processing failed at node {node['id']}: {str(e)}"
                     logger.error(error_msg)
+                    COORDINATOR_REQUESTS.labels(status='error').inc()
                     context.set_code(grpc.StatusCode.INTERNAL)
                     context.set_details(error_msg)
                     return model_service_pb2.ModelOutput()
+            
+            # Record total processing time and success
+            TOTAL_PROCESSING_TIME.observe(time.time() - start_time)
+            COORDINATOR_REQUESTS.labels(status='success').inc()
             
             # For the final response, only return the generated tokens (exclude the original input)
             final_response = current_sequence[input_length:]
@@ -130,6 +184,7 @@ class ModelCoordinator(model_service_pb2_grpc.ModelServiceServicer):
         except Exception as e:
             error_msg = f"Request processing failed: {str(e)}"
             logger.error(error_msg)
+            COORDINATOR_REQUESTS.labels(status='error').inc()
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(error_msg)
             return model_service_pb2.ModelOutput()

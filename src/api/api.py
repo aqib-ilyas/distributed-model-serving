@@ -10,6 +10,7 @@ import grpc.aio
 import time
 import asyncio
 import sys
+from prometheus_client import start_http_server, Counter, Histogram, Gauge, Info, make_asgi_app
 
 # Add relative import path for proto files
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -29,7 +30,41 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Define Prometheus metrics
+REQUEST_COUNT = Counter(
+    'api_requests_total',
+    'Total number of API requests',
+    ['method', 'endpoint', 'status']
+)
+
+REQUEST_LATENCY = Histogram(
+    'api_request_latency_seconds',
+    'Request latency in seconds',
+    ['method', 'endpoint']
+)
+
+TOKENIZATION_LATENCY = Histogram(
+    'api_tokenization_latency_seconds',
+    'Time taken for tokenization operations',
+    ['operation']  # 'encode' or 'decode'
+)
+
+MODEL_PROCESSING_LATENCY = Histogram(
+    'api_model_processing_latency_seconds',
+    'Time taken for model processing'
+)
+
+TOKEN_COUNT = Gauge(
+    'api_token_count',
+    'Number of tokens in request/response',
+    ['type']  # 'input' or 'output'
+)
+
 app = FastAPI(title="Model Serving API")
+
+# Add prometheus metrics endpoint
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,6 +100,7 @@ class TokenizerClient:
             self.stub = tokenizer_service_pb2_grpc.TokenizerServiceStub(self.channel)
 
     async def tokenize(self, text: str, metadata: Dict[str, str] = None) -> list[float]:
+        start_time = time.time()
         await self.connect()
         try:
             response = await self.stub.process_text(
@@ -73,12 +109,18 @@ class TokenizerClient:
                     metadata=metadata or {}
                 )
             )
+            
+            # Record metrics
+            TOKENIZATION_LATENCY.labels('encode').observe(time.time() - start_time)
+            TOKEN_COUNT.labels('input').set(len(response.tokens))
+            
             return list(response.tokens)
         except Exception as e:
             logger.error(f"Tokenization failed: {str(e)}")
             raise
 
     async def decode(self, tokens: list[float], metadata: Dict[str, str] = None) -> str:
+        start_time = time.time()
         await self.connect()
         try:
             response = await self.stub.process_tokens(
@@ -87,6 +129,11 @@ class TokenizerClient:
                     metadata=metadata or {}
                 )
             )
+            
+            # Record metrics
+            TOKENIZATION_LATENCY.labels('decode').observe(time.time() - start_time)
+            TOKEN_COUNT.labels('output').set(len(tokens))
+            
             return response.text
         except Exception as e:
             logger.error(f"Decoding failed: {str(e)}")
@@ -105,7 +152,7 @@ async def shutdown_event():
 @app.post("/api/model/process")
 async def process_model(request: ModelRequest):
     """Process text through the distributed model"""
-    start_time = time.time()
+    request_start_time = time.time()
     model_channel = None
     
     try:
@@ -127,21 +174,27 @@ async def process_model(request: ModelRequest):
         )
         model_stub = model_service_pb2_grpc.ModelServiceStub(model_channel)
         
-        # Create gRPC request
-        grpc_request = model_service_pb2.ModelInput(
-            data=input_tokens,
-            metadata=request.metadata
-        )
-        
-        # Call coordinator service with timeout
+        # Process through model
+        model_start_time = time.time()
         try:
             response = await asyncio.wait_for(
-                model_stub.process(grpc_request),
+                model_stub.process(model_service_pb2.ModelInput(
+                    data=input_tokens,
+                    metadata=request.metadata
+                )),
                 timeout=30.0
             )
+            # Record model processing time
+            MODEL_PROCESSING_LATENCY.observe(time.time() - model_start_time)
             logger.info(f"Received response from model. Tokens: {list(response.data)}")
+            
         except asyncio.TimeoutError:
             logger.error("Request timed out")
+            REQUEST_COUNT.labels(
+                method='POST',
+                endpoint='/api/model/process',
+                status='timeout'
+            ).inc()
             raise HTTPException(status_code=504, detail="Request timed out")
         
         # Decode output tokens
@@ -151,7 +204,19 @@ async def process_model(request: ModelRequest):
         )
         logger.info(f"Final decoded output text: {output_text}")
         
-        processing_time = (time.time() - start_time) * 1000  # Convert to milliseconds
+        # Calculate total processing time
+        processing_time = (time.time() - request_start_time) * 1000  # Convert to milliseconds
+        
+        # Record request metrics
+        REQUEST_COUNT.labels(
+            method='POST',
+            endpoint='/api/model/process',
+            status='success'
+        ).inc()
+        REQUEST_LATENCY.labels(
+            method='POST',
+            endpoint='/api/model/process'
+        ).observe(time.time() - request_start_time)
         
         return ModelResponse(
             text=output_text,
@@ -161,6 +226,11 @@ async def process_model(request: ModelRequest):
         
     except Exception as e:
         logger.error(f"Error processing request: {str(e)}")
+        REQUEST_COUNT.labels(
+            method='POST',
+            endpoint='/api/model/process',
+            status='error'
+        ).inc()
         raise HTTPException(
             status_code=500,
             detail=f"Processing failed: {str(e)}"

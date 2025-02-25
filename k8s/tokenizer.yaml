@@ -1,0 +1,51 @@
+# k8s/tokenizer.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: tokenizer
+    labels:
+        app: tokenizer
+spec:
+    replicas: 2 # One replica for redundancy
+    selector:
+        matchLabels:
+            app: tokenizer
+    template:
+        metadata:
+            labels:
+                app: tokenizer
+        spec:
+            containers:
+                - name: tokenizer
+                  image: tokenizer:latest
+                  imagePullPolicy: Never
+                  ports:
+                      - containerPort: 50054
+                      - containerPort: 8002 # Metrics port
+                  readinessProbe:
+                      tcpSocket:
+                          port: 50054
+                      initialDelaySeconds: 10
+                      periodSeconds: 10
+                  resources:
+                      requests:
+                          memory: "1Gi"
+                          cpu: "250m"
+                      limits:
+                          memory: "2Gi"
+                          cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: tokenizer
+spec:
+    selector:
+        app: tokenizer
+    ports:
+        - name: grpc
+          port: 50054
+          targetPort: 50054
+        - name: metrics
+          port: 8002
+          targetPort: 8002

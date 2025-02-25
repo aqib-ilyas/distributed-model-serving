@@ -1,3 +1,4 @@
+# docker/tokenizer.Dockerfile
 FROM python:3.9-slim
 
 WORKDIR /app
@@ -7,6 +8,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     netcat-traditional \
+    && pip install prometheus_client \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file
@@ -27,8 +29,8 @@ RUN python -m grpc_tools.protoc -I./src/proto \
 # Set Python path
 ENV PYTHONPATH=/app
 
-# Expose port
-EXPOSE 50054
+# Expose gRPC and metrics ports
+EXPOSE 50054 8002
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \

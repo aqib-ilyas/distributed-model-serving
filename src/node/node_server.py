@@ -5,9 +5,12 @@ from concurrent import futures
 import torch
 from transformers import AutoModelForCausalLM, GPT2Tokenizer
 import grpc
-import grpc.aio  # Add explicit import for grpc.aio
+import grpc.aio
 import asyncio
 import sys
+import time
+import psutil
+from prometheus_client import start_http_server, Counter, Histogram, Gauge, Info
 
 # Add relative import path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -25,13 +28,54 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Define metrics
+INFERENCE_REQUESTS = Counter(
+    'model_inference_requests_total',
+    'Total number of inference requests',
+    ['node_id', 'status']
+)
+
+INFERENCE_LATENCY = Histogram(
+    'model_inference_latency_seconds',
+    'Time taken for model inference',
+    ['node_id']
+)
+
+MEMORY_USAGE = Gauge(
+    'model_memory_usage_bytes',
+    'Current memory usage of the model',
+    ['node_id', 'type']  # type can be 'system' or 'gpu'
+)
+
+GPU_MEMORY_USAGE = Gauge(
+    'model_gpu_memory_usage_bytes',
+    'Current GPU memory usage',
+    ['node_id', 'type']  # type can be 'allocated' or 'reserved'
+)
+
+NODE_INFO = Info('model_node', 'Model node information')
+
 class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
     
     def __init__(self, config_path: str, node_id: str):
+        # Start Prometheus metrics server
+        start_http_server(8001)
+        
         self.config = self.load_config(config_path, node_id)
         self.tokenizer = GPT2Tokenizer.from_pretrained('gpt2') 
         self.model = self.load_model()
         self.cache = {}
+        
+        # Record node information
+        NODE_INFO.info({
+            'node_id': node_id,
+            'model_name': self.config['model_name'],
+            'device': 'cuda' if torch.cuda.is_available() else 'cpu',
+            'model_part': str(self.config['node_config']['model_part'])
+        })
+        
+        # Start memory monitoring
+        self.update_memory_metrics()
         logger.info("Node %s initialized successfully", node_id)
     
     def load_config(self, config_path: str, node_id: str) -> dict:
@@ -53,6 +97,34 @@ class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
             logger.error("Failed to load config: %s", str(e))
             raise
     
+    def update_memory_metrics(self):
+        """Update memory usage metrics."""
+        try:
+            # System memory
+            process = psutil.Process()
+            memory_info = process.memory_info()
+            MEMORY_USAGE.labels(
+                node_id=self.config['node_config']['id'],
+                type='system'
+            ).set(memory_info.rss)
+            
+            # GPU memory if available
+            if torch.cuda.is_available():
+                allocated = torch.cuda.memory_allocated()
+                reserved = torch.cuda.memory_reserved()
+                
+                GPU_MEMORY_USAGE.labels(
+                    node_id=self.config['node_config']['id'],
+                    type='allocated'
+                ).set(allocated)
+                
+                GPU_MEMORY_USAGE.labels(
+                    node_id=self.config['node_config']['id'],
+                    type='reserved'
+                ).set(reserved)
+        except Exception as e:
+            logger.error(f"Failed to update memory metrics: {str(e)}")
+
     def create_device_map(self) -> tuple[dict, bool]:
         """Create device map for this node's portion of the model."""
         try:
@@ -115,6 +187,7 @@ class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
 
     async def process(self, request, context):
         """Process input through this node's portion of the model."""
+        start_time = time.time()
         try:
             logger.info(f"Node {self.config['node_config']['id']} received input: {list(request.data)}")
             
@@ -138,12 +211,12 @@ class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
                     'attention_mask': attention_mask,
                     'num_beams': 5,
                     'do_sample': True,
-                    'top_k': 40,         # Increased from 30
-                    'top_p': 0.95,       # Increased from 0.92
-                    'temperature': 0.8,   # Slightly reduced
+                    'top_k': 40,
+                    'top_p': 0.95,
+                    'temperature': 0.8,
                     'pad_token_id': self.model.config.eos_token_id,
-                    'repetition_penalty': 1.3,  # Increased from 1.2
-                    'length_penalty': 1.2,      # Increased to favor longer sequences
+                    'repetition_penalty': 1.3,
+                    'length_penalty': 1.2,
                     'early_stopping': True,
                 }
                 
@@ -151,22 +224,22 @@ class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
                 if is_first_node:
                     # First node generates a longer main response
                     generation_params.update({
-                        'max_length': input_length + 30,  # Increased from 20 
-                        'min_length': input_length + 15,  # Increased from 10
+                        'max_length': input_length + 30,
+                        'min_length': input_length + 15,
                         'no_repeat_ngram_size': 3,
                     })
                 elif is_last_node:
                     # Last node adds a proper conclusion
                     generation_params.update({
-                        'max_length': input_length + 10,  # Increased from 5
-                        'min_length': input_length + 3,   # Increased from 1
+                        'max_length': input_length + 10,
+                        'min_length': input_length + 3,
                         'no_repeat_ngram_size': 2,
                     })
                 else:
                     # Middle node continues the thought
                     generation_params.update({
-                        'max_length': input_length + 15,  # Increased from 8
-                        'min_length': input_length + 5,   # Increased from 3
+                        'max_length': input_length + 15,
+                        'min_length': input_length + 5,
                         'no_repeat_ngram_size': 2,
                     })
                 
@@ -178,6 +251,19 @@ class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
                 
                 logger.info(f"Node {self.config['node_config']['id']} generated new tokens: {output_sequence}")
                 
+                # Update metrics
+                inference_time = time.time() - start_time
+                INFERENCE_LATENCY.labels(
+                    node_id=self.config['node_config']['id']
+                ).observe(inference_time)
+                
+                INFERENCE_REQUESTS.labels(
+                    node_id=self.config['node_config']['id'],
+                    status='success'
+                ).inc()
+                
+                self.update_memory_metrics()
+                
                 # Return combined sequence
                 combined_sequence = list(request.data) + output_sequence
                 return model_service_pb2.ModelOutput(data=combined_sequence)
@@ -185,6 +271,12 @@ class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
         except Exception as e:
             error_msg = f"Processing failed: {str(e)}"
             logger.error(error_msg)
+            
+            INFERENCE_REQUESTS.labels(
+                node_id=self.config['node_config']['id'],
+                status='error'
+            ).inc()
+            
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(error_msg)
             return model_service_pb2.ModelOutput()
@@ -203,6 +295,9 @@ class ModelNode(model_service_pb2_grpc.ModelServiceServicer):
             if torch.cuda.is_available():
                 gpu_memory = torch.cuda.get_device_properties(0).total_memory
                 memory_info = f", GPU Memory: {gpu_memory / (1024**2):.2f}MB"
+            
+            # Update memory metrics
+            self.update_memory_metrics()
             
             status = f"OK (Running on {device_info}{memory_info})"
             return model_service_pb2.HealthCheckResponse(status=status)

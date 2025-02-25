@@ -5,7 +5,9 @@ import grpc
 import grpc.aio
 import asyncio
 import sys
+import time
 from transformers import GPT2Tokenizer
+from prometheus_client import start_http_server, Counter, Histogram, Info
 
 # Add relative import path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -23,9 +25,41 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Define metrics
+TOKENIZER_REQUESTS = Counter(
+    'tokenizer_requests_total',
+    'Total number of tokenizer requests',
+    ['operation', 'status']  # operation: encode/decode, status: success/error
+)
+
+TOKENIZER_LATENCY = Histogram(
+    'tokenizer_operation_latency_seconds',
+    'Time taken for tokenizer operations',
+    ['operation']  # encode/decode
+)
+
+TOKEN_COUNT = Counter(
+    'tokenizer_token_count_total',
+    'Total number of tokens processed',
+    ['operation']  # encode/decode
+)
+
+TOKENIZER_INFO = Info('tokenizer', 'Tokenizer information')
+
 class TokenizerServicer(tokenizer_service_pb2_grpc.TokenizerServiceServicer):
     def __init__(self):
+        # Start Prometheus metrics server
+        start_http_server(8002)
+        
         self.tokenizer = self.load_tokenizer()
+        
+        # Record tokenizer information
+        TOKENIZER_INFO.info({
+            'model': 'gpt2',
+            'vocab_size': str(len(self.tokenizer.get_vocab())),
+            'max_length': str(self.tokenizer.model_max_length)
+        })
+        
         logger.info("Tokenizer service initialized")
 
     def load_tokenizer(self):
@@ -51,6 +85,7 @@ class TokenizerServicer(tokenizer_service_pb2_grpc.TokenizerServiceServicer):
 
     async def process_text(self, request, context):
         """Tokenize input text."""
+        start_time = time.time()
         try:
             # Add EOS token and return as normal Python list
             tokens = self.tokenizer.encode(
@@ -66,16 +101,37 @@ class TokenizerServicer(tokenizer_service_pb2_grpc.TokenizerServiceServicer):
             verify = self.tokenizer.decode(tokens)
             logger.info(f"Verification decode: {verify}")
             
+            # Update metrics
+            TOKENIZER_REQUESTS.labels(
+                operation='encode',
+                status='success'
+            ).inc()
+            
+            TOKENIZER_LATENCY.labels(
+                operation='encode'
+            ).observe(time.time() - start_time)
+            
+            TOKEN_COUNT.labels(
+                operation='encode'
+            ).inc(len(tokens))
+            
             return tokenizer_service_pb2.TokenOutput(tokens=tokens)
         except Exception as e:
             error_msg = f"Text processing failed: {str(e)}"
             logger.error(error_msg)
+            
+            TOKENIZER_REQUESTS.labels(
+                operation='encode',
+                status='error'
+            ).inc()
+            
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(error_msg)
             return tokenizer_service_pb2.TokenOutput()
 
     async def process_tokens(self, request, context):
         """Process tokens to text."""
+        start_time = time.time()
         try:
             # Convert float tokens to integers
             tokens = [int(float(t)) for t in request.tokens]
@@ -90,15 +146,34 @@ class TokenizerServicer(tokenizer_service_pb2_grpc.TokenizerServiceServicer):
             
             # Clean up the text
             text = text.strip()  # Remove leading/trailing whitespace
-            
-            # Remove multiple newlines
             text = ' '.join(line.strip() for line in text.splitlines() if line.strip())
             
             logger.info(f"Decoded text: {text}")
+            
+            # Update metrics
+            TOKENIZER_REQUESTS.labels(
+                operation='decode',
+                status='success'
+            ).inc()
+            
+            TOKENIZER_LATENCY.labels(
+                operation='decode'
+            ).observe(time.time() - start_time)
+            
+            TOKEN_COUNT.labels(
+                operation='decode'
+            ).inc(len(tokens))
+            
             return tokenizer_service_pb2.TextOutput(text=text)
         except Exception as e:
             error_msg = f"Token processing failed: {str(e)}"
             logger.error(error_msg)
+            
+            TOKENIZER_REQUESTS.labels(
+                operation='decode',
+                status='error'
+            ).inc()
+            
             context.set_code(grpc.StatusCode.INTERNAL)
             context.set_details(error_msg)
             return tokenizer_service_pb2.TextOutput()

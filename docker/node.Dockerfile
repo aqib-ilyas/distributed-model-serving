@@ -6,6 +6,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
+    && pip install prometheus_client psutil \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -18,3 +19,6 @@ RUN python -m grpc_tools.protoc -I./src/proto --python_out=./src/proto --grpc_py
 
 # Copy the rest of the application
 COPY . .
+
+# Expose gRPC and metrics ports
+EXPOSE 50051 8001

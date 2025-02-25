@@ -1,0 +1,56 @@
+# k8s/coordinator.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: coordinator
+    labels:
+        app: coordinator
+spec:
+    replicas: 1 # Coordinator is stateful, keep single replica
+    selector:
+        matchLabels:
+            app: coordinator
+    template:
+        metadata:
+            labels:
+                app: coordinator
+        spec:
+            containers:
+                - name: coordinator
+                  image: coordinator:latest
+                  imagePullPolicy: Never # For local images
+                  ports:
+                      - containerPort: 50050
+                      - containerPort: 8000 # Metrics port
+                  volumeMounts:
+                      - name: config-volume
+                        mountPath: /app/src/config
+                  readinessProbe:
+                      tcpSocket:
+                          port: 50050
+                      initialDelaySeconds: 10
+                      periodSeconds: 10
+                  livenessProbe:
+                      tcpSocket:
+                          port: 50050
+                      initialDelaySeconds: 15
+                      periodSeconds: 20
+            volumes:
+                - name: config-volume
+                  configMap:
+                      name: model-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: coordinator
+spec:
+    selector:
+        app: coordinator
+    ports:
+        - name: grpc
+          port: 50050
+          targetPort: 50050
+        - name: metrics
+          port: 8000
+          targetPort: 8000

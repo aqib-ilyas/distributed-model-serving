@@ -1,0 +1,29 @@
+# prometheus/prometheus.yml
+global:
+    scrape_interval: 15s
+    evaluation_interval: 15s
+
+scrape_configs:
+    - job_name: "coordinator"
+      static_configs:
+          - targets: ["coordinator:8000"]
+            labels:
+                service: "coordinator"
+
+    - job_name: "nodes"
+      static_configs:
+          - targets: ["node1:8001", "node2:8001", "node3:8001"]
+            labels:
+                service: "model_nodes"
+
+    - job_name: "tokenizer"
+      static_configs:
+          - targets: ["tokenizer:8002"]
+            labels:
+                service: "tokenizer"
+
+    - job_name: "api"
+      static_configs:
+          - targets: ["api:8000"]
+            labels:
+                service: "api"

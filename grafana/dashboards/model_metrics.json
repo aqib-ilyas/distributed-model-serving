@@ -1,0 +1,167 @@
+{
+    "annotations": {
+        "list": []
+    },
+    "editable": true,
+    "graphTooltip": 0,
+    "links": [],
+    "panels": [
+        {
+            "title": "API Request Latency",
+            "type": "timeseries",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "rate(api_request_latency_seconds_sum[5m]) / rate(api_request_latency_seconds_count[5m])",
+                    "legendFormat": "Average Latency"
+                }
+            ]
+        },
+        {
+            "title": "Model Inference Latency by Node",
+            "type": "timeseries",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 0
+            },
+            "targets": [
+                {
+                    "expr": "rate(model_inference_latency_seconds_sum[5m]) / rate(model_inference_latency_seconds_count[5m])",
+                    "legendFormat": "{{node_id}}"
+                }
+            ]
+        },
+        {
+            "title": "Tokenizer Operations",
+            "type": "timeseries",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "expr": "rate(tokenizer_requests_total[5m])",
+                    "legendFormat": "{{operation}}"
+                }
+            ]
+        },
+        {
+            "title": "Memory Usage by Node",
+            "type": "timeseries",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 8
+            },
+            "targets": [
+                {
+                    "expr": "model_memory_usage_bytes",
+                    "legendFormat": "{{node_id}} ({{type}})"
+                }
+            ]
+        },
+        {
+            "title": "Request Success/Error Rate",
+            "type": "stat",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 0,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "expr": "sum(increase(api_requests_total{status='success'}[5m]))",
+                    "legendFormat": "Success"
+                },
+                {
+                    "expr": "sum(increase(api_requests_total{status='error'}[5m]))",
+                    "legendFormat": "Error"
+                }
+            ]
+        },
+        {
+            "title": "Token Counts",
+            "type": "gauge",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 8,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "expr": "api_token_count",
+                    "legendFormat": "{{type}}"
+                }
+            ]
+        },
+        {
+            "title": "Node Health Status",
+            "type": "stat",
+            "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 16
+            },
+            "targets": [
+                {
+                    "expr": "node_health_status",
+                    "legendFormat": "{{node_id}}"
+                }
+            ]
+        }
+    ],
+    "refresh": "5s",
+    "schemaVersion": 38,
+    "style": "dark",
+    "templating": {
+        "list": []
+    },
+    "time": {
+        "from": "now-15m",
+        "to": "now"
+    },
+    "title": "Model Inference Metrics",
+    "uid": "model-metrics-001",
+    "version": 1
+}
