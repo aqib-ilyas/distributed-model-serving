@@ -2,12 +2,6 @@
 
 A scalable, distributed system for serving machine learning models with high availability and monitoring capabilities.
 
-## System Architecture
-
-This system distributes a language model across multiple nodes, enabling more efficient serving and higher throughput:
-
-![System Architecture](https://mermaid.ink/img/pako:eNqVVF1r2zAU_StCT-ugjnPtlieTA9t6KAxCk70VPch2nYjKkpFkxyv97zuSk9RuYTQPDvK9n-fee0T3IlQKRSIUJcgGWvhXnONI1r1XjcwZwZwBL1uKpQbiQg68K0XSAMdWJCUWPcjWITcFi0bHQRkSoGnAuhjrJJP3HWsJrVuuq1zyGKTNEVYgVQYsXkJpShY9m3F4rq6tZTjM1jQNeDnlr0NkDfYhMDkZxOc1XJRiZLSGOV4UHGxO3kw2rQkJ32GFZrn00jXN9vRdkEzq6lPLBb8zBptWn2nUg7s5Lv0LcuZkX9-AEHO2M7x93l_wYDHHFPCeSh-ZiRHdCHOnnwCmzpRQumFn7ljqkO2lj0rQ7nnKyNbFMnCw9TwNQMHw33nh1oJpFuF2c7ybM1hRXrDhPsFsm80OUG7qFfNmZOsWpepAlPxRQnOrnDVCu0w7hDFtK6j3S-sMYWVQoVQpvs_vS5Cf8ftx1E74a0GQZlk2CIJoVaHJnmVoI78C3RGlS6xTFHlB90OZGj4EvKnBtOhC9M7RDY9G6MJXrKTbGEy37nIbQ1LznnFTAO0Gy8YOV7XKxpnhw0lOH4_KqQy2QCYOVVCjrPrYrpytKsj-f9HuWV4fBe9-mh9pnLsfrfWXebY6HenUx5l-KFkT-nBkHYqBL9dnyOeA-rlLt9zIQfxOz7YlUg0kO4KY-VE06XWpVNBJ3GxkNUg3kTQG7bm6aB0Nls2JeENKx2d8rXCK_2-oPnwNuN3g-vaqNXzRwcv3q3X8JUKf6mj5pP_TBIl_JJHwb_KbQpk0IhHu85d5fkfnN99_fP_55SaZZXbiyVFhzjfbxJsHs_lHbzaJd35xkSSL2VmSLPw5nCn-F-5W7rHv3vbZ57N_zZa9OA)
-
 ### Components:
 
 1. **Frontend Service**
@@ -63,19 +57,25 @@ git clone https://github.com/yourusername/distributed-model-inference.git
 cd distributed-model-inference
 ```
 
-2. Build and start the services:
+2. Create the Docker network:
+
+```bash
+docker network create model-network
+```
+
+3. Build and start the services:
 
 ```bash
 docker-compose up -d
 ```
 
-3. Start the monitoring stack:
+4. Start the monitoring stack:
 
 ```bash
 docker-compose -f docker-compose.monitoring.yml up -d
 ```
 
-4. Access the interfaces:
+5. Access the interfaces:
     - Frontend: http://localhost:5173
     - API Docs: http://localhost:8000/docs
     - Prometheus: http://localhost:9090
@@ -179,6 +179,10 @@ scrape_configs:
 ### Docker Compose (Local Development)
 
 ```bash
+# Create Docker network if it doesn't exist
+docker network create model-network
+
+# Start services
 docker-compose up -d
 docker-compose -f docker-compose.monitoring.yml up -d
 ```
@@ -220,8 +224,9 @@ The system supports high availability through node replication:
 ### Common Issues
 
 1. **Service fails to start**: Check logs with `docker-compose logs <service_name>`
-2. **Grafana can't connect to Prometheus**: Verify network connectivity and datasource configuration
-3. **Model inference errors**: Check node logs and memory usage
+2. **Network connectivity issues**: Verify the `model-network` exists with `docker network ls`
+3. **Grafana can't connect to Prometheus**: Verify network connectivity and datasource configuration
+4. **Model inference errors**: Check node logs and memory usage
 
 ### Checking Logs
 
