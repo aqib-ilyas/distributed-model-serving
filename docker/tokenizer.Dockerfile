@@ -1,4 +1,3 @@
-# docker/tokenizer.Dockerfile
 FROM python:3.9-slim
 
 WORKDIR /app
@@ -34,7 +33,7 @@ EXPOSE 50054 8002
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD nc -z localhost 50054 || exit 1
+    CMD nc -z 0.0.0.0 50054 || exit 1
 
 # Run the application
-CMD ["python", "src/tokenizer/tokenizer_server.py", "--port", "50054"]
+CMD ["python", "src/tokenizer/tokenizer_server.py", "--port", "50054", "--host", "0.0.0.0"]

@@ -17,7 +17,7 @@ spec:
         spec:
             containers:
                 - name: coordinator
-                  image: coordinator:latest
+                  image: aqibilyas/coordinator:latest
                   imagePullPolicy: Never # For local images
                   ports:
                       - containerPort: 50050

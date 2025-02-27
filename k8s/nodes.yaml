@@ -17,7 +17,7 @@ spec:
         spec:
             containers:
                 - name: node1
-                  image: node:latest
+                  image: aqibilyas/node:latest
                   imagePullPolicy: Never
                   args:
                       [
@@ -67,7 +67,7 @@ spec:
         spec:
             containers:
                 - name: node2
-                  image: node:latest
+                  image: aqibilyas/node:latest
                   imagePullPolicy: Never
                   args:
                       [
@@ -117,7 +117,7 @@ spec:
         spec:
             containers:
                 - name: node3
-                  image: node:latest
+                  image: aqibilyas/node:latest
                   imagePullPolicy: Never
                   args:
                       [

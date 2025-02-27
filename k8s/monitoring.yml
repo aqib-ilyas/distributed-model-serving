@@ -1,0 +1,360 @@
+# Combined k8s/monitoring.yml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: prometheus-config
+data:
+    prometheus.yml: |
+        global:
+          scrape_interval: 15s
+          evaluation_interval: 15s
+
+        scrape_configs:
+          - job_name: "coordinator"
+            static_configs:
+              - targets: ["coordinator:8000"]
+                labels:
+                  service: "coordinator"
+
+          - job_name: "nodes"
+            static_configs:
+              - targets: ["node1:8001", "node2:8001", "node3:8001"]
+                labels:
+                  service: "model_nodes"
+
+          - job_name: "tokenizer"
+            static_configs:
+              - targets: ["tokenizer:8002"]
+                labels:
+                  service: "tokenizer"
+
+          - job_name: "api"
+            static_configs:
+              - targets: ["api:8000"]
+                labels:
+                  service: "api"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: grafana-datasources
+data:
+    prometheus.yaml: |
+        apiVersion: 1
+
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            access: proxy
+            orgId: 1
+            uid: prometheus
+            url: http://prometheus:9090
+            basicAuth: false
+            isDefault: true
+            version: 1
+            editable: true
+            jsonData:
+              timeInterval: "15s"
+              queryTimeout: "60s"
+              httpMethod: "POST"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: grafana-dashboards-provisioning
+data:
+    dashboard.yaml: |
+        apiVersion: 1
+
+        providers:
+          - name: "default"
+            orgId: 1
+            folder: ""
+            type: file
+            disableDeletion: false
+            allowUiUpdates: true
+            options:
+              path: /etc/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: grafana-dashboards
+data:
+    model_metrics.json: |
+        {
+          "annotations": {
+            "list": []
+          },
+          "editable": true,
+          "graphTooltip": 0,
+          "links": [],
+          "panels": [
+            {
+              "title": "API Request Latency",
+              "type": "timeseries",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 0
+              },
+              "targets": [
+                {
+                  "expr": "rate(api_request_latency_seconds_sum[5m]) / rate(api_request_latency_seconds_count[5m])",
+                  "legendFormat": "Average Latency"
+                }
+              ]
+            },
+            {
+              "title": "Model Inference Latency by Node",
+              "type": "timeseries",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 0
+              },
+              "targets": [
+                {
+                  "expr": "rate(model_inference_latency_seconds_sum[5m]) / rate(model_inference_latency_seconds_count[5m])",
+                  "legendFormat": "{{node_id}}"
+                }
+              ]
+            },
+            {
+              "title": "Tokenizer Operations",
+              "type": "timeseries",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 8
+              },
+              "targets": [
+                {
+                  "expr": "rate(tokenizer_requests_total[5m])",
+                  "legendFormat": "{{operation}}"
+                }
+              ]
+            },
+            {
+              "title": "Memory Usage by Node",
+              "type": "timeseries",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 8
+              },
+              "targets": [
+                {
+                  "expr": "model_memory_usage_bytes",
+                  "legendFormat": "{{node_id}} ({{type}})"
+                }
+              ]
+            },
+            {
+              "title": "Request Success/Error Rate",
+              "type": "stat",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 0,
+                "y": 16
+              },
+              "targets": [
+                {
+                  "expr": "sum(increase(api_requests_total{status='success'}[5m]))",
+                  "legendFormat": "Success"
+                },
+                {
+                  "expr": "sum(increase(api_requests_total{status='error'}[5m]))",
+                  "legendFormat": "Error"
+                }
+              ]
+            },
+            {
+              "title": "Token Counts",
+              "type": "gauge",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 8,
+                "y": 16
+              },
+              "targets": [
+                {
+                  "expr": "api_token_count",
+                  "legendFormat": "{{type}}"
+                }
+              ]
+            },
+            {
+              "title": "Node Health Status",
+              "type": "stat",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 16
+              },
+              "targets": [
+                {
+                  "expr": "node_health_status",
+                  "legendFormat": "{{node_id}}"
+                }
+              ]
+            }
+          ],
+          "refresh": "5s",
+          "schemaVersion": 38,
+          "style": "dark",
+          "templating": {
+            "list": []
+          },
+          "time": {
+            "from": "now-15m",
+            "to": "now"
+          },
+          "title": "Model Inference Metrics",
+          "uid": "model-metrics-001",
+          "version": 1
+        }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: prometheus
+    labels:
+        app: prometheus
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: prometheus
+    template:
+        metadata:
+            labels:
+                app: prometheus
+        spec:
+            containers:
+                - name: prometheus
+                  image: prom/prometheus:latest
+                  ports:
+                      - containerPort: 9090
+                  volumeMounts:
+                      - name: prometheus-config
+                        mountPath: /etc/prometheus
+                      - name: prometheus-storage
+                        mountPath: /prometheus
+            volumes:
+                - name: prometheus-config
+                  configMap:
+                      name: prometheus-config
+                - name: prometheus-storage
+                  emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: prometheus
+spec:
+    selector:
+        app: prometheus
+    type: NodePort
+    ports:
+        - name: http
+          port: 9090
+          nodePort: 30003
+          targetPort: 9090
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: grafana
+    labels:
+        app: grafana
+spec:
+    replicas: 1
+    selector:
+        matchLabels:
+            app: grafana
+    template:
+        metadata:
+            labels:
+                app: grafana
+        spec:
+            containers:
+                - name: grafana
+                  image: grafana/grafana:latest
+                  ports:
+                      - containerPort: 3000
+                  env:
+                      - name: GF_SECURITY_ADMIN_PASSWORD
+                        value: "admin"
+                      - name: GF_USERS_ALLOW_SIGN_UP
+                        value: "false"
+                  volumeMounts:
+                      - name: grafana-storage
+                        mountPath: /var/lib/grafana
+                      - name: grafana-datasources
+                        mountPath: /etc/grafana/provisioning/datasources
+                      - name: grafana-dashboards-provisioning
+                        mountPath: /etc/grafana/provisioning/dashboards
+                      - name: grafana-dashboards
+                        mountPath: /etc/grafana/dashboards
+            volumes:
+                - name: grafana-storage
+                  emptyDir: {}
+                - name: grafana-datasources
+                  configMap:
+                      name: grafana-datasources
+                - name: grafana-dashboards-provisioning
+                  configMap:
+                      name: grafana-dashboards-provisioning
+                - name: grafana-dashboards
+                  configMap:
+                      name: grafana-dashboards
+---
+apiVersion: v1
+kind: Service
+metadata:
+    name: grafana
+spec:
+    selector:
+        app: grafana
+    type: NodePort
+    ports:
+        - name: http
+          port: 3000
+          nodePort: 30002
+          targetPort: 3000
