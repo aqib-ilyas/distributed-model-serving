@@ -18,7 +18,7 @@ spec:
             containers:
                 - name: api
                   image: aqibilyas/api:latest
-                  imagePullPolicy: Never
+                  imagePullPolicy: Always
                   ports:
                       - containerPort: 8000
                   env:
