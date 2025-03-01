@@ -18,10 +18,10 @@ spec:
             containers:
                 - name: coordinator
                   image: aqibilyas/coordinator:latest
-                  imagePullPolicy: Never # For local images
+                  imagePullPolicy: Always
                   ports:
                       - containerPort: 50050
-                      - containerPort: 8000 # Metrics port
+                      - containerPort: 8000
                   volumeMounts:
                       - name: config-volume
                         mountPath: /app/src/config

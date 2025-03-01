@@ -18,7 +18,7 @@ spec:
             containers:
                 - name: node1
                   image: aqibilyas/node:latest
-                  imagePullPolicy: Never
+                  imagePullPolicy: Always
                   args:
                       [
                           "--config",
@@ -68,7 +68,7 @@ spec:
             containers:
                 - name: node2
                   image: aqibilyas/node:latest
-                  imagePullPolicy: Never
+                  imagePullPolicy: Always
                   args:
                       [
                           "--config",
@@ -118,7 +118,7 @@ spec:
             containers:
                 - name: node3
                   image: aqibilyas/node:latest
-                  imagePullPolicy: Never
+                  imagePullPolicy: Always
                   args:
                       [
                           "--config",

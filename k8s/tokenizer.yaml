@@ -18,7 +18,7 @@ spec:
             containers:
                 - name: tokenizer
                   image: aqibilyas/tokenizer:latest
-                  imagePullPolicy: Never
+                  imagePullPolicy: Always
                   ports:
                       - containerPort: 50054
                       - containerPort: 8002 # Metrics port
