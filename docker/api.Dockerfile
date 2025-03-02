@@ -17,3 +17,6 @@ COPY . .
 
 # Expose API and metrics ports
 EXPOSE 8000 8000
+
+# Command to run the application
+CMD ["uvicorn", "src.api.api:app", "--host", "0.0.0.0", "--port", "8000"]

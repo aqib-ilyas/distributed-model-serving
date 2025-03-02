@@ -21,3 +21,6 @@ COPY . .
 
 # Expose gRPC and metrics ports
 EXPOSE 50050 8000
+
+# Command to run the application
+CMD ["python", "/app/src/coordinator/coordinator_server.py", "--config", "/app/src/config/config.json", "--port", "50050"]
