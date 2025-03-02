@@ -34,6 +34,18 @@ data:
                 labels:
                   service: "api"
 ---
+# Create a PVC for Grafana
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+    name: grafana-pvc
+spec:
+    accessModes:
+        - ReadWriteOnce
+    resources:
+        requests:
+            storage: 5Gi
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:

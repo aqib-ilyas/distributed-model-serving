@@ -35,5 +35,5 @@ EXPOSE 50054 8002
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD nc -z 0.0.0.0 50054 || exit 1
 
-# Run the application
-CMD ["python", "src/tokenizer/tokenizer_server.py", "--port", "50054", "--host", "0.0.0.0"]
+# Run the application - removed the --host argument
+CMD ["python", "src/tokenizer/tokenizer_server.py", "--port", "50054"]
