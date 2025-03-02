@@ -16,6 +16,9 @@ COPY src/tokenizer/requirements.txt requirements.txt
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-download the tokenizer model during build
+RUN python -c "from transformers import GPT2Tokenizer; tokenizer = GPT2Tokenizer.from_pretrained('gpt2')"
+
 # Copy source code
 COPY src/ /app/src/
 
@@ -35,5 +38,5 @@ EXPOSE 50054 8002
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD nc -z 0.0.0.0 50054 || exit 1
 
-# Run the application - removed the --host argument
+# Run the application
 CMD ["python", "src/tokenizer/tokenizer_server.py", "--port", "50054"]

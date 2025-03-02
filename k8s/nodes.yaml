@@ -39,11 +39,11 @@ spec:
                       periodSeconds: 10
                   resources:
                       requests:
-                          memory: "2Gi"
-                          cpu: "500m"
+                          cpu: 250m # Reducing from 500m to 250m
+                          memory: 1Gi # Reducing from 2Gi to 1Gi
                       limits:
-                          memory: "4Gi"
-                          cpu: "1000m"
+                          cpu: 500m # Reducing from 1 to 500m
+                          memory: 2Gi # Reducing from 4Gi to 2Gi
             volumes:
                 - name: config-volume
                   configMap:
@@ -89,11 +89,11 @@ spec:
                       periodSeconds: 10
                   resources:
                       requests:
-                          memory: "2Gi"
-                          cpu: "500m"
+                          cpu: 250m # Reducing from 500m to 250m
+                          memory: 1Gi # Reducing from 2Gi to 1Gi
                       limits:
-                          memory: "4Gi"
-                          cpu: "1000m"
+                          cpu: 500m # Reducing from 1 to 500m
+                          memory: 2Gi # Reducing from 4Gi to 2Gi
             volumes:
                 - name: config-volume
                   configMap:
@@ -139,11 +139,11 @@ spec:
                       periodSeconds: 10
                   resources:
                       requests:
-                          memory: "2Gi"
-                          cpu: "500m"
+                          cpu: 250m # Reducing from 500m to 250m
+                          memory: 1Gi # Reducing from 2Gi to 1Gi
                       limits:
-                          memory: "4Gi"
-                          cpu: "1000m"
+                          cpu: 500m # Reducing from 1 to 500m
+                          memory: 2Gi # Reducing from 4Gi to 2Gi
             volumes:
                 - name: config-volume
                   configMap:

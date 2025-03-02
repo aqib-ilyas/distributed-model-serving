@@ -1,4 +1,3 @@
-# docker/node.Dockerfile
 FROM python:3.9-slim
 
 WORKDIR /app
@@ -16,6 +15,11 @@ RUN pip install -r requirements.txt
 # Copy proto files and generate them
 COPY src/proto /app/src/proto
 RUN python -m grpc_tools.protoc -I./src/proto --python_out=./src/proto --grpc_python_out=./src/proto ./src/proto/model_service.proto
+
+# Pre-download models - add this section
+RUN python -c "from transformers import GPT2Tokenizer, AutoModelForCausalLM; \
+    tokenizer = GPT2Tokenizer.from_pretrained('gpt2'); \
+    model = AutoModelForCausalLM.from_pretrained('gpt2')"
 
 # Copy the rest of the application
 COPY . .
