@@ -30,4 +30,4 @@ EXPOSE 50051-50053 8001
 # Command to run the application
 # Note: For Kubernetes, you'll need to set the NODE_ID and potentially PORT as environment variables
 # This example defaults to node1, but should be overridden in k8s deployment
-CMD ["python", "/app/src/node/node_server.py", "--config", "/app/src/config/config.json", "--node-id", "${NODE_ID:-node1}"]
+CMD ["python", "/app/src/node/node_server.py"]

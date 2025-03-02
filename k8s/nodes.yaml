@@ -18,13 +18,12 @@ spec:
                 - name: node1
                   image: aqibilyas/node:latest
                   imagePullPolicy: Always
+                  command: ["python", "/app/src/node/node_server.py"]
                   args:
-                      [
-                          "--config",
-                          "/app/src/config/config.json",
-                          "--node-id",
-                          "node1",
-                      ]
+                      - "--config"
+                      - "/app/src/config/config.json"
+                      - "--node-id"
+                      - "node1"
                   ports:
                       - containerPort: 50051
                       - containerPort: 8001 # Metrics port
@@ -68,13 +67,12 @@ spec:
                 - name: node2
                   image: aqibilyas/node:latest
                   imagePullPolicy: Always
+                  command: ["python", "/app/src/node/node_server.py"]
                   args:
-                      [
-                          "--config",
-                          "/app/src/config/config.json",
-                          "--node-id",
-                          "node2",
-                      ]
+                      - "--config"
+                      - "/app/src/config/config.json"
+                      - "--node-id"
+                      - "node2"
                   ports:
                       - containerPort: 50052
                       - containerPort: 8001
@@ -118,13 +116,12 @@ spec:
                 - name: node3
                   image: aqibilyas/node:latest
                   imagePullPolicy: Always
+                  command: ["python", "/app/src/node/node_server.py"]
                   args:
-                      [
-                          "--config",
-                          "/app/src/config/config.json",
-                          "--node-id",
-                          "node3",
-                      ]
+                      - "--config"
+                      - "/app/src/config/config.json"
+                      - "--node-id"
+                      - "node3"
                   ports:
                       - containerPort: 50053
                       - containerPort: 8001
