@@ -6,7 +6,6 @@ metadata:
     labels:
         app: node1
 spec:
-    replicas: 2 # One replica for redundancy
     selector:
         matchLabels:
             app: node1

@@ -6,7 +6,6 @@ metadata:
     labels:
         app: coordinator
 spec:
-    replicas: 1 # Coordinator is stateful, keep single replica
     selector:
         matchLabels:
             app: coordinator

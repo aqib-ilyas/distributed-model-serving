@@ -6,7 +6,6 @@ metadata:
     labels:
         app: tokenizer
 spec:
-    replicas: 2 # One replica for redundancy
     selector:
         matchLabels:
             app: tokenizer
