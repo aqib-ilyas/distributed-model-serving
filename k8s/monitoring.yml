@@ -33,18 +33,7 @@ data:
               - targets: ["api:8000"]
                 labels:
                   service: "api"
----
-# Create a PVC for Grafana
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-    name: grafana-pvc
-spec:
-    accessModes:
-        - ReadWriteOnce
-    resources:
-        requests:
-            storage: 5Gi
+
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -335,6 +324,15 @@ spec:
                         value: "admin"
                       - name: GF_USERS_ALLOW_SIGN_UP
                         value: "false"
+                  resources:
+                      requests:
+                          memory: "256Mi"
+                          cpu: "100m"
+                          ephemeral-storage: "1Gi"
+                      limits:
+                          memory: "512Mi"
+                          cpu: "500m"
+                          ephemeral-storage: "2Gi"
                   volumeMounts:
                       - name: grafana-storage
                         mountPath: /var/lib/grafana
@@ -346,7 +344,8 @@ spec:
                         mountPath: /etc/grafana/dashboards
             volumes:
                 - name: grafana-storage
-                  emptyDir: {}
+                  persistentVolumeClaim:
+                      claimName: grafana-pvc
                 - name: grafana-datasources
                   configMap:
                       name: grafana-datasources
@@ -356,6 +355,18 @@ spec:
                 - name: grafana-dashboards
                   configMap:
                       name: grafana-dashboards
+---
+# Create a PVC for Grafana
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+    name: grafana-pvc
+spec:
+    accessModes:
+        - ReadWriteOnce
+    resources:
+        requests:
+            storage: 5Gi
 ---
 apiVersion: v1
 kind: Service
