@@ -6,6 +6,7 @@ metadata:
     labels:
         app: node1
 spec:
+    replicas: 1
     selector:
         matchLabels:
             app: node1
@@ -54,7 +55,7 @@ metadata:
     labels:
         app: node2
 spec:
-    replicas: 2
+    replicas: 1
     selector:
         matchLabels:
             app: node2
@@ -103,7 +104,7 @@ metadata:
     labels:
         app: node3
 spec:
-    replicas: 2
+    replicas: 1
     selector:
         matchLabels:
             app: node3
